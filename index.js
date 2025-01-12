@@ -8,9 +8,9 @@ import fs from "fs/promises";
 import fsWrite from "fs";
 import path, { dirname } from "path";
 import { fileURLToPath } from "url";
-import { speakText } from "./speechToText.js";
+import { speakText } from "./utils/speechToText.js";
+import { randomPhrase } from "./utils/randomPhrase.js";
 
-// Step 1: Initialize Fastify
 const fastify = Fastify({
   bodyLimit: 100 * 1024 * 1024,
 });
@@ -27,7 +27,6 @@ const UPLOAD_DIR = path.join(__dirname, "uploads");
   }
 })();
 
-// Step 2: Register Fastify WebSocket
 fastify.register(cors, {
   // allowedHeaders: [
   // 'Content-Type',
@@ -54,7 +53,7 @@ fastify.register(fastifyWebsocket);
 fastify.get("/api/get-csrf-token/", (_req, res) => {
   return { csrfToken: crypto.randomBytes(8).toString("hex") };
 });
-// Step 3: Define a WebSocket Route
+
 fastify.register(async function (fastify) {
   fastify.get(
     "/ws/voice/:interviewId/:candidateId/",
@@ -64,23 +63,12 @@ fastify.register(async function (fastify) {
 
       const interviewId = req.params?.interviewId;
       const candidateId = req.params?.candidateId;
-      // console.log('interviewId:', interviewId);
-      // if (!interviewId || !candidateId) {
-      //   console.log('Missing parameters');
-      //   ws.close();
-      //   return;
-      // }
+
       ws.on("message", async (text) => {
         // message.toString() === 'hi from client'
         console.log("passing message to client", text.toString());
-        // if (!text || typeof text !== "string" || text.trim() === "") {
-        //   // return reply.status(400).send({ error: 'Text is required.' });
-        //   if (!text.length) return;
-        //   ws.send(
-        //     JSON.stringify({ type: "error", error: "Text is required." })
-        //   );
-        // }
-        const sampleText = "Hello, I am an AI assistant. How can I help you?";
+
+        const sampleText = randomPhrase();
         const base64Audio = await speakText(sampleText);
         ws.send(
           JSON.stringify({
@@ -101,7 +89,6 @@ fastify.register(async function (fastify) {
   );
 });
 
-// Step 4: Define a Simple REST API Endpoint
 fastify.get("/api", async (req, reply) => {
   return { message: "Hello, Fastify!" };
 });
@@ -123,14 +110,8 @@ fastify.post("/api/init-multipart-upload/", async (req, res) => {
       status: "in-progress",
       key,
     });
-
-    // Simulate network delay
     await new Promise((resolve) => setTimeout(resolve, 500));
     return { uploadId, key, message: "Multipart upload initialized" };
-    // res.json({
-    //   uploadId,
-    //   message: 'Multipart upload initialized',
-    // });
   } catch (error) {
     console.error("Initialize upload error:", error);
     res.status(500).send({
@@ -139,7 +120,6 @@ fastify.post("/api/init-multipart-upload/", async (req, res) => {
   }
 });
 
-// Generate presigned URL for part upload
 fastify.post("/api/get-upload-part-url/", async (req, res) => {
   try {
     const { uploadId, partNumber } = req.body;
@@ -151,7 +131,6 @@ fastify.post("/api/get-upload-part-url/", async (req, res) => {
     }
 
     // Generate mock presigned URL
-    // In a real implementation, this would be a signed S3 URL
     const presignedUrl = `http://localhost:3000/api/upload-part/${uploadId}/${partNumber}`;
 
     // Simulate network delay
@@ -166,7 +145,7 @@ fastify.post("/api/get-upload-part-url/", async (req, res) => {
   }
 });
 
-// Handle actual part upload
+// Handles actual part upload
 fastify.put("/api/upload-part/:uploadId/:partNumber", async (req, res) => {
   try {
     const { uploadId, partNumber } = req.params;
@@ -178,18 +157,10 @@ fastify.put("/api/upload-part/:uploadId/:partNumber", async (req, res) => {
       });
     }
 
-    // Create a temporary file for this part
     const partFilePath = path.join(UPLOAD_DIR, `${uploadId}-part${partNumber}`);
 
     // Stream the part data to file
     await fs.writeFile(partFilePath, req.body);
-    // const writeStream = fsWrite.createWriteStream(partFilePath);
-    // req.pipe(writeStream);
-
-    // await new Promise((resolve, reject) => {
-    //   writeStream.on("finish", resolve);
-    //   writeStream.on("error", reject);
-    // });
 
     // Generate ETag (in S3 this would be MD5 of the part)
     const partData = await fs.readFile(partFilePath);
@@ -206,8 +177,6 @@ fastify.put("/api/upload-part/:uploadId/:partNumber", async (req, res) => {
     const delay = Math.min(partData.length / 10000, 2000);
     await new Promise((resolve) => setTimeout(resolve, delay));
 
-    // res.set('ETag', `"${etag}"`);
-    // res.status(200).send();
     res.header("ETag", `"${etag}"`).status(200).send();
   } catch (error) {
     console.error("Upload part error:", error);
