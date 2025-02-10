@@ -15,6 +15,7 @@ const fastify = Fastify({
   bodyLimit: 100 * 1024 * 1024,
 });
 const multipartUploads = new Map();
+let chatCount = 0;
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
@@ -71,8 +72,10 @@ fastify.register(async function (fastify) {
 
         const sampleText = randomPhrase();
         const base64Audio = await speakText(sampleText);
+        chatCount += 1;
         ws.send(
           JSON.stringify({
+            // type: chatCount > 1 ? 'interview_end' : 'ai_response',
             type: 'ai_response',
             audio_url: base64Audio,
             text: sampleText,
@@ -100,6 +103,7 @@ fastify.post('/api/init-multipart-upload/', async (req, res) => {
     const { fileName, fileType, interviewId, candidate_id } = req.body;
     // Generate unique upload ID (simulating S3's upload ID)
     // console.log('candidate_id:', candidate_id);
+    chatCount = 0;
     const uploadId = crypto.randomUUID().slice(0, 8);
     const key = `${interviewId}/${candidate_id}/${uploadId}`;
 
